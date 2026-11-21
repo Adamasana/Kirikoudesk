@@ -308,6 +308,65 @@ class DatabaseMigrations {
       CREATE INDEX idx_commande_encaisse_par
       ON ${DatabaseTables.commande}(encaisse_par)
     ''');
+
+    await creerTablesInventaire(db);
+  }
+
+  static Future<void> creerTablesInventaire(
+    DatabaseExecutor db,
+  ) async {
+    await db.execute('''
+      CREATE TABLE inventaire (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        point_vente_id INTEGER NOT NULL,
+        utilisateur_id INTEGER,
+        date_creation TEXT NOT NULL,
+        statut TEXT NOT NULL DEFAULT 'en_cours',
+
+        FOREIGN KEY (point_vente_id)
+          REFERENCES point_vente (id),
+
+        FOREIGN KEY (utilisateur_id)
+          REFERENCES utilisateur (id)
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE ligne_inventaire (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        inventaire_id INTEGER NOT NULL,
+        code TEXT NOT NULL,
+        quantite INTEGER NOT NULL DEFAULT 0,
+
+        FOREIGN KEY (inventaire_id)
+          REFERENCES inventaire (id)
+          ON DELETE CASCADE,
+
+        UNIQUE (inventaire_id, code)
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE scan_inventaire (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ligne_inventaire_id INTEGER NOT NULL,
+        date_scan TEXT NOT NULL,
+
+        FOREIGN KEY (ligne_inventaire_id)
+          REFERENCES ligne_inventaire (id)
+          ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX idx_ligne_inventaire_session
+      ON ligne_inventaire (inventaire_id)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX idx_scan_inventaire_ligne
+      ON scan_inventaire (ligne_inventaire_id)
+    ''');
   }
 
   // ============================================================
@@ -363,5 +422,15 @@ class DatabaseMigrations {
         ''');
       }
     }
+
+     // ============================================================
+    // VERSION 4
+    // Création des tables d'inventaire
+    // ============================================================
+
+    if (oldVersion < 4) {
+      await creerTablesInventaire(db);
+    }
+    
   }
 }

@@ -59,6 +59,10 @@ class _MenuLateralState extends State<MenuLateral> {
       titre: 'Produit',
       icone: Icons.inventory_2_outlined,
     ),
+    _ElementMenu(
+      titre: 'Inventaire',
+      icone: Icons.qr_code_scanner_outlined,
+    ),
   ];
 
   @override

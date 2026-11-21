@@ -9,5 +9,9 @@ class DatabaseTables {
   static const String shop = 'shop';
   static const String synchronisation = 'synchronisation';
 
+  static const String inventaire = 'inventaire';
+  static const String ligneInventaire = 'ligne_inventaire';
+  static const String scanInventaire = 'scan_inventaire';
+
   const DatabaseTables._();
 }

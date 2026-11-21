@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -7,7 +8,7 @@ class ApiClient {
   // ============================================================
   // URL DE L'API
   // ============================================================
-  //
+
   // DEVELOPPEMENT :
   // http://127.0.0.1:8000/api/desktop
   //
@@ -22,11 +23,10 @@ class ApiClient {
   //
   // Si API_BASE_URL n'est pas fourni, l'application utilise
   // automatiquement l'URL locale de développement.
-  //
+
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue:
-        'https://kirikoubf.fondationaic.org/api/desktop',
+    defaultValue: 'http://127.0.0.1:8000/api/desktop',
   );
 
   final http.Client _client;
@@ -228,34 +228,46 @@ class ApiClient {
         }
       }
     } else if (reponse.body.isNotEmpty) {
-      message =
-          reponse.body;
+      message = reponse.body;
     }
 
     // ----------------------------------------------------------
-    // IMPORTANT :
-    //
-    // On conserve toute la réponse JSON du serveur.
-    //
-    // Exemple :
-    //
-    // {
-    //   "success": false,
-    //   "code": "stock_insuffisant",
-    //   "identifiant": "ch001-xl-vert",
-    //   "stock_disponible": 0,
-    //   "quantite_demandee": 1,
-    //   "stock_restant": 0
-    // }
-    //
-    // Le service de synchronisation peut donc récupérer
-    // ces informations via ApiException.data.
+    // CONSERVER LA REPONSE COMPLETE DU SERVEUR
     // ----------------------------------------------------------
 
     throw ApiException(
       message,
       reponse.statusCode,
       data: donnees,
+    );
+  }
+
+  // ============================================================
+  // VALIDER INVENTAIRE
+  // ============================================================
+
+  Future<Map<String, dynamic>> validerInventaire({
+    required int pointVenteId,
+    required List<Map<String, dynamic>> scans,
+    required String typeInventaire,
+    String? token,
+  }) async {
+    // Vérifier le type d'inventaire.
+    if (typeInventaire != 'total' &&
+        typeInventaire != 'partiel') {
+      throw ArgumentError(
+        'Le type d’inventaire doit être total ou partiel.',
+      );
+    }
+
+    return post(
+      '/valider_inventaire/',
+      token: token,
+      donnees: {
+        'point_vente_id': pointVenteId,
+        'type_inventaire': typeInventaire,
+        'scans': scans,
+      },
     );
   }
 
@@ -287,6 +299,7 @@ class ApiException implements Exception {
   ///     stock_restant
   ///
   /// en cas d'erreur serveur.
+
   final dynamic data;
 
   const ApiException(

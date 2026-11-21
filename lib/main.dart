@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -7,6 +8,7 @@ import 'pages/dashboard_page.dart';
 import 'pages/caisse_page.dart';
 import 'pages/factures_page.dart';
 import 'pages/produit_page.dart';
+import 'pages/inventaire_page.dart';
 import 'repositories/authentification_repository.dart';
 import 'services/synchronisation/donnees_reference_service.dart';
 import 'services/synchronisation/synchronisation_globale_service.dart';
@@ -73,7 +75,6 @@ class _DemarragePageState extends State<DemarragePage> {
         final service = DonneesReferenceService();
 
         await service.synchroniser();
-
         await service.afficherDonneesLocales();
 
         service.fermer();
@@ -132,19 +133,33 @@ class _ApplicationPageState extends State<ApplicationPage> {
   // ============================================================
   // CLÉ DE LA PAGE CAISSE
   // ============================================================
-  //
-  // Cette clé permet au main de demander directement à
-  // CaissePage de relire les données locales après une
-  // synchronisation globale.
-  //
+
   final GlobalKey<CaissePageState> _caissePageKey =
       GlobalKey<CaissePageState>();
+
+  // ============================================================
+  // CONSERVATION DES PAGES
+  // ============================================================
+
+  // Les pages sont créées uniquement lorsqu'on les ouvre
+  // pour la première fois.
+  //
+  // Une fois créées, elles restent conservées dans l'IndexedStack.
+  //
+  // Cela évite de détruire l'état d'une page lorsqu'on change
+  // de menu.
+
+  final List<Widget?> _pages = List<Widget?>.filled(
+    5,
+    null,
+  );
 
   final List<String> _titres = const [
     'Dashboard',
     'Caisse',
     'Factures',
     'Produit',
+    'Inventaire',
   ];
 
   final List<String> _sousTitres = const [
@@ -152,7 +167,67 @@ class _ApplicationPageState extends State<ApplicationPage> {
     'Gérez vos ventes.',
     'Consultez et gérez vos factures.',
     'Gérez vos produits.',
+    'Scannez et enregistrez les articles de votre inventaire.',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+
+    // La première page est créée au démarrage.
+    _pages[0] = _creerPage(0);
+  }
+
+  // ============================================================
+  // CRÉER UNE PAGE
+  // ============================================================
+
+  Widget _creerPage(int index) {
+    switch (index) {
+      case 0:
+        return DashboardPage(
+          onMenuSelectionne: _selectionnerMenu,
+        );
+
+      case 1:
+        return CaissePage(
+          key: _caissePageKey,
+        );
+
+      case 2:
+        return const FacturesPage();
+
+      case 3:
+        return const ProduitPage();
+
+      case 4:
+        return InventairePage(
+          key: const ValueKey('inventaire-page'),
+          estVisible: true,
+        );
+
+      default:
+        return DashboardPage(
+          onMenuSelectionne: _selectionnerMenu,
+        );
+    }
+  }
+
+  // ============================================================
+  // CONSTRUIRE LES PAGES CONSERVÉES
+  // ============================================================
+
+  Widget _construirePages() {
+    return IndexedStack(
+      index: _indexActif,
+      children: List.generate(
+        _pages.length,
+        (index) {
+          return _pages[index] ?? const SizedBox.shrink();
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -188,7 +263,6 @@ class _ApplicationPageState extends State<ApplicationPage> {
           onSynchronisationGlobale:
               _synchroniserGlobalement,
         ),
-
         Expanded(
           child: _construireZonePrincipale(),
         ),
@@ -247,9 +321,8 @@ class _ApplicationPageState extends State<ApplicationPage> {
     return Column(
       children: [
         _construireEntete(),
-
         Expanded(
-          child: _construirePageActuelle(),
+          child: _construirePages(),
         ),
       ],
     );
@@ -274,9 +347,7 @@ class _ApplicationPageState extends State<ApplicationPage> {
       child: Row(
         children: [
           _construireBoutonMenu(),
-
           const SizedBox(width: 16),
-
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -293,9 +364,7 @@ class _ApplicationPageState extends State<ApplicationPage> {
                     color: Couleurs.texte,
                   ),
                 ),
-
                 const SizedBox(height: 3),
-
                 Text(
                   _sousTitres[_indexActif],
                   maxLines: 1,
@@ -310,9 +379,7 @@ class _ApplicationPageState extends State<ApplicationPage> {
               ],
             ),
           ),
-
           const SizedBox(width: 12),
-
           IconButton(
             tooltip: 'Notifications',
             onPressed: () {
@@ -334,9 +401,7 @@ class _ApplicationPageState extends State<ApplicationPage> {
               color: Couleurs.muted,
             ),
           ),
-
           const SizedBox(width: 4),
-
           Container(
             width: 34,
             height: 34,
@@ -389,66 +454,40 @@ class _ApplicationPageState extends State<ApplicationPage> {
   }
 
   // ============================================================
-  // PAGE ACTUELLE
-  // ============================================================
-
-  Widget _construirePageActuelle() {
-    switch (_indexActif) {
-      case 0:
-        return DashboardPage(
-          onMenuSelectionne: _selectionnerMenu,
-        );
-
-      case 1:
-        return CaissePage(
-          key: _caissePageKey,
-        );
-
-      case 2:
-        return const FacturesPage();
-
-      case 3:
-        return const ProduitPage();
-
-      default:
-        return DashboardPage(
-          onMenuSelectionne: _selectionnerMenu,
-        );
-    }
-  }
-
-  // ============================================================
   // SÉLECTION MENU
   // ============================================================
 
   void _selectionnerMenu(int index) {
+    if (index < 0 || index >= _pages.length) {
+      return;
+    }
+
     setState(() {
       _indexActif = index;
-    });
 
-    if (MediaQuery.of(context).size.width <= 768) {
-      setState(() {
+      // Créer la page uniquement lors de sa première ouverture.
+      _pages[index] ??= _creerPage(index);
+
+      // Mettre à jour la visibilité de la page Inventaire.
+      //
+      // La même clé permet de conserver son State.
+      // didUpdateWidget sera appelé pour informer la page
+      // qu'elle est maintenant visible ou masquée.
+      if (_pages[4] is InventairePage) {
+        _pages[4] = InventairePage(
+          key: const ValueKey('inventaire-page'),
+          estVisible: index == 4,
+        );
+      }
+
+      if (MediaQuery.of(context).size.width <= 768) {
         _menuOuvert = false;
-      });
-    }
+      }
+    });
   }
 
   // ============================================================
   // SYNCHRONISATION GLOBALE
-  // ============================================================
-  //
-  // Cette méthode est appelée directement par le bouton
-  // de synchronisation du MenuLateral.
-  //
-  // Elle utilise SynchronisationGlobaleService.
-  //
-  // Après une synchronisation réussie, on demande directement
-  // à CaissePage de relire SQLite.
-  //
-  // Cela permet notamment de faire disparaître immédiatement
-  // les commandes qui viennent d'être synchronisées puis
-  // supprimées localement.
-  //
   // ============================================================
 
   Future<void> _synchroniserGlobalement() async {
@@ -502,17 +541,7 @@ class _ApplicationPageState extends State<ApplicationPage> {
         ),
       );
 
-      // ----------------------------------------------------------
-      // RAFRAÎCHISSEMENT RÉEL DE LA CAISSE
-      // ----------------------------------------------------------
-      //
-      // Si CaissePage est actuellement affichée, on lui demande
-      // directement de recharger ses données depuis SQLite.
-      //
-      // Cela est différent d'un simple setState() ici :
-      // le State de CaissePage possède déjà sa liste _commandes,
-      // donc il faut appeler sa méthode actualiser().
-      //
+      // Rafraîchir réellement la caisse si elle est affichée.
       if (_indexActif == 1) {
         await _caissePageKey.currentState?.actualiser();
       }

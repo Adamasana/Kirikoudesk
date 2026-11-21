@@ -10,29 +10,17 @@ import 'database_migrations.dart';
 
 class DatabaseHelper {
   static const String nomBase = 'kirikoubf.db';
-
-  // Version 3 :
-  // - v2 : ajout de encaisse_par
-  // - v3 : ajout de date_validation
-  static const int versionBase = 3;
+  static const int versionBase = 4;
 
   static Database? _base;
 
   const DatabaseHelper._();
 
-  static Future<Database> obtenirBase() async {
-    if (_base != null) {
-      return _base!;
-    }
+  // ============================================================
+  // CHEMIN UNIQUE DE LA BASE SQLITE
+  // ============================================================
 
-    // Ancien emplacement : utilisé par la version précédente.
-    final ancienDossier = await getDatabasesPath();
-    final ancienChemin = p.join(
-      ancienDossier,
-      nomBase,
-    );
-
-    // Nouvel emplacement accessible en écriture sous Windows.
+  static Future<String> obtenirCheminBase() async {
     final dossierApplication =
         await getApplicationSupportDirectory();
 
@@ -42,41 +30,41 @@ class DatabaseHelper {
 
     await dossierBase.create(recursive: true);
 
-    final cheminBase = p.join(
-      dossierBase.path,
-      nomBase,
-    );
+    return p.join(dossierBase.path, nomBase);
+  }
 
-    // Préserver l'ancienne base si la nouvelle n'existe pas.
-    if (p.normalize(ancienChemin) !=
-            p.normalize(cheminBase) &&
-        !await File(cheminBase).exists() &&
-        await File(ancienChemin).exists()) {
-      await File(ancienChemin).copy(cheminBase);
+  // ============================================================
+  // OUVERTURE DE LA BASE
+  // ============================================================
 
-      // Préserver également le journal SQLite éventuel.
-      final ancienWal = File('$ancienChemin-wal');
-      if (await ancienWal.exists()) {
-        await ancienWal.copy('$cheminBase-wal');
-      }
-
-      debugPrint(
-        'Ancienne base SQLite copiée vers : $cheminBase',
-      );
+  static Future<Database> obtenirBase() async {
+    if (_base != null && _base!.isOpen) {
+      return _base!;
     }
 
-    debugPrint('CHEMIN BASE SQLITE : $cheminBase');
+    final cheminBase = await obtenirCheminBase();
+
+    debugPrint('BASE SQLITE ACTIVE : $cheminBase');
 
     _base = await openDatabase(
       cheminBase,
       version: versionBase,
+
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
+
       onCreate: (db, version) async {
+        debugPrint('Création de la nouvelle base SQLite');
+
         await DatabaseMigrations.onCreate(db);
       },
+
       onUpgrade: (db, oldVersion, newVersion) async {
+        debugPrint(
+          'Migration SQLite : $oldVersion vers $newVersion',
+        );
+
         await DatabaseMigrations.onUpgrade(
           db,
           oldVersion,
@@ -88,10 +76,15 @@ class DatabaseHelper {
     return _base!;
   }
 
+  // ============================================================
+  // FERMETURE DE LA BASE
+  // ============================================================
+
   static Future<void> fermerBase() async {
-    if (_base != null) {
+    if (_base != null && _base!.isOpen) {
       await _base!.close();
-      _base = null;
     }
+
+    _base = null;
   }
 }
