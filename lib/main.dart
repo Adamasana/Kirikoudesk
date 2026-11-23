@@ -138,6 +138,17 @@ class _ApplicationPageState extends State<ApplicationPage> {
       GlobalKey<CaissePageState>();
 
   // ============================================================
+  // CLÉ DE LA PAGE FACTURES
+  // ============================================================
+
+  final GlobalKey<FacturesPageState> _facturesPageKey =
+      GlobalKey<FacturesPageState>();
+
+  
+  final GlobalKey<DashboardPageState> _dashboardPageKey =
+    GlobalKey<DashboardPageState>();
+
+  // ============================================================
   // CONSERVATION DES PAGES
   // ============================================================
 
@@ -186,16 +197,22 @@ class _ApplicationPageState extends State<ApplicationPage> {
     switch (index) {
       case 0:
         return DashboardPage(
+          key: _dashboardPageKey,
           onMenuSelectionne: _selectionnerMenu,
         );
 
       case 1:
         return CaissePage(
           key: _caissePageKey,
+          onFactureSynchronisee: () async {
+            await _facturesPageKey.currentState?.actualiser();
+          },
         );
 
       case 2:
-        return const FacturesPage();
+        return FacturesPage(
+          key: _facturesPageKey,
+        );
 
       case 3:
         return const ProduitPage();
@@ -469,10 +486,6 @@ class _ApplicationPageState extends State<ApplicationPage> {
       _pages[index] ??= _creerPage(index);
 
       // Mettre à jour la visibilité de la page Inventaire.
-      //
-      // La même clé permet de conserver son State.
-      // didUpdateWidget sera appelé pour informer la page
-      // qu'elle est maintenant visible ou masquée.
       if (_pages[4] is InventairePage) {
         _pages[4] = InventairePage(
           key: const ValueKey('inventaire-page'),
@@ -484,103 +497,121 @@ class _ApplicationPageState extends State<ApplicationPage> {
         _menuOuvert = false;
       }
     });
+
+    // Actualiser les statistiques à chaque ouverture du Dashboard.
+    if (index == 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+
+        _dashboardPageKey.currentState?.actualiser();
+      });
+    }
   }
 
   // ============================================================
   // SYNCHRONISATION GLOBALE
   // ============================================================
 
-  Future<void> _synchroniserGlobalement() async {
-    final service = SynchronisationGlobaleService();
+  
+Future<void> _synchroniserGlobalement() async {
+  final service = SynchronisationGlobaleService();
 
-    try {
-      final resultat = await service.synchroniser();
+  try {
+    final resultat = await service.synchroniser();
 
-      if (!mounted) {
-        return;
-      }
+    if (!mounted) return;
 
-      final total = resultat.totalCommandes;
+    final total = resultat.totalCommandes;
 
-      final synchronisees =
-          resultat.commandesSynchronisees;
+    final synchronisees =
+        resultat.commandesSynchronisees;
 
-      final dejaSynchronisees =
-          resultat.commandesDejaSynchronisees;
+    final dejaSynchronisees =
+        resultat.commandesDejaSynchronisees;
 
-      final erreurs =
-          resultat.nombreErreurs;
+    final erreurs =
+        resultat.nombreErreurs;
 
-      String message;
+    String message;
 
-      if (total == 0) {
-        message =
-            'Synchronisation terminée. '
-            'Aucune commande en attente.';
-      } else if (erreurs > 0) {
-        message =
-            'Synchronisation terminée : '
-            '$synchronisees synchronisée(s), '
-            '$dejaSynchronisees déjà synchronisée(s), '
-            '$erreurs erreur(s).';
-      } else {
-        message =
-            'Synchronisation terminée : '
-            '$synchronisees commande(s) synchronisée(s).';
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            message,
-            style: const TextStyle(
-              fontFamily: 'Inter',
-            ),
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-
-      // Rafraîchir réellement la caisse si elle est affichée.
-      if (_indexActif == 1) {
-        await _caissePageKey.currentState?.actualiser();
-      }
-    } on SynchronisationGlobaleException catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.message,
-            style: const TextStyle(
-              fontFamily: 'Inter',
-            ),
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Erreur pendant la synchronisation : $e',
-            style: const TextStyle(
-              fontFamily: 'Inter',
-            ),
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } finally {
-      service.fermer();
+    if (total == 0) {
+      message =
+          'Synchronisation terminée. '
+          'Aucune commande en attente.';
+    } else if (erreurs > 0) {
+      message =
+          'Synchronisation terminée : '
+          '$synchronisees synchronisée(s), '
+          '$dejaSynchronisees déjà synchronisée(s), '
+          '$erreurs erreur(s).';
+    } else {
+      message =
+          'Synchronisation terminée : '
+          '$synchronisees commande(s) synchronisée(s).';
     }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: const TextStyle(
+            fontFamily: 'Inter',
+          ),
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    // ============================================================
+    // ACTUALISATION DES PAGES APRÈS SYNCHRONISATION
+    // ============================================================
+
+    // Actualiser la caisse si elle est affichée.
+    if (_indexActif == 1) {
+      await _caissePageKey.currentState?.actualiser();
+    }
+
+    // Actualiser les factures si la page existe.
+    await _facturesPageKey.currentState?.actualiser();
+
+    // Actualiser les statistiques du Dashboard.
+    await _dashboardPageKey.currentState?.actualiser();
+
+  } on SynchronisationGlobaleException catch (e) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          e.message,
+          style: const TextStyle(
+            fontFamily: 'Inter',
+          ),
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+  } catch (e) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Erreur pendant la synchronisation : $e',
+          style: const TextStyle(
+            fontFamily: 'Inter',
+          ),
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+  } finally {
+    service.fermer();
   }
+}
+
 
   // ============================================================
   // DÉCONNEXION

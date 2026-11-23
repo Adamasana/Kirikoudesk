@@ -17,7 +17,12 @@ import '../theme/couleurs.dart';
 import 'detail_commande_page.dart';
 
 class CaissePage extends StatefulWidget {
-  const CaissePage({super.key});
+  final Future<void> Function()? onFactureSynchronisee;
+
+  const CaissePage({
+    super.key,
+    this.onFactureSynchronisee,
+  });
 
   @override
   CaissePageState createState() => CaissePageState();
@@ -671,8 +676,7 @@ class CaissePageState extends State<CaissePage> {
       return;
     }
 
-    final confirmer =
-        await _afficherConfirmation(
+    final confirmer = await _afficherConfirmation(
       titre: 'Valider la commande',
       message:
           'Cette commande va être validée comme facture.\n\n'
@@ -680,16 +684,12 @@ class CaissePageState extends State<CaissePage> {
           'synchronisée avec le serveur. Sinon, elle restera '
           'en attente et sera synchronisée automatiquement '
           'dès que la connexion sera disponible.',
-      icone:
-          Icons.check_circle_outline,
-      couleur:
-          const Color(0xFF34C759),
-      texteConfirmation:
-          'Valider',
+      icone: Icons.check_circle_outline,
+      couleur: const Color(0xFF34C759),
+      texteConfirmation: 'Valider',
     );
 
-    if (!confirmer ||
-        !mounted) {
+    if (!confirmer || !mounted) {
       return;
     }
 
@@ -704,8 +704,7 @@ class CaissePageState extends State<CaissePage> {
       // --------------------------------------------------------
 
       final commandeValidee =
-          await _commandeRepository
-              .validerLocalement(
+          await _commandeRepository.validerLocalement(
         commande.id!,
       );
 
@@ -731,8 +730,7 @@ class CaissePageState extends State<CaissePage> {
       // --------------------------------------------------------
 
       try {
-        await _commandeSyncService
-            .synchroniserCommande(
+        await _commandeSyncService.synchroniserCommande(
           commandeValidee,
         );
 
@@ -746,8 +744,27 @@ class CaissePageState extends State<CaissePage> {
           return;
         }
 
-        ScaffoldMessenger.of(context)
-            .showSnackBar(
+        // ------------------------------------------------------
+        // Actualisation immédiate de la liste des factures.
+        //
+        // La commande vient d'être envoyée au serveur.
+        // On demande donc à FacturesPage de récupérer les
+        // dernières factures et de mettre à jour son affichage.
+        // ------------------------------------------------------
+
+        try {
+          await widget.onFactureSynchronisee?.call();
+        } catch (e) {
+          debugPrint(
+            'Erreur lors de l’actualisation des factures : $e',
+          );
+        }
+
+        if (!mounted) {
+          return;
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
               'Facture synchronisée avec succès.',
@@ -783,8 +800,7 @@ class CaissePageState extends State<CaissePage> {
           return;
         }
 
-        ScaffoldMessenger.of(context)
-            .showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
               'Facture enregistrée localement. '
@@ -804,8 +820,7 @@ class CaissePageState extends State<CaissePage> {
         return;
       }
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             'Impossible de valider la commande localement : '
@@ -824,8 +839,7 @@ class CaissePageState extends State<CaissePage> {
         return;
       }
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             'Impossible de valider la commande localement : $e',

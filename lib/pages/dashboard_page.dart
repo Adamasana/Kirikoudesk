@@ -19,10 +19,10 @@ class DashboardPage extends StatefulWidget {
   });
 
   @override
-  State<DashboardPage> createState() => _DashboardPageState();
+  DashboardPageState createState() => DashboardPageState();
 }
 
-class _DashboardPageState extends State<DashboardPage> {
+class DashboardPageState extends State<DashboardPage> {
   // ============================================================
   // SERVICE STATISTIQUES
   // ============================================================
@@ -57,6 +57,17 @@ class _DashboardPageState extends State<DashboardPage> {
     _statistiquesService.fermer();
 
     super.dispose();
+  }
+
+
+  Future<void> actualiser() async {
+    if (!mounted) return;
+
+    setState(() {
+      _chargementStatistiques = true;
+    });
+
+    await _chargerStatistiques();
   }
 
   // ============================================================

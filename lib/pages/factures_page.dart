@@ -9,10 +9,10 @@ class FacturesPage extends StatefulWidget {
   const FacturesPage({super.key});
 
   @override
-  State<FacturesPage> createState() => _FacturesPageState();
+  State<FacturesPage> createState() => FacturesPageState();
 }
 
-class _FacturesPageState extends State<FacturesPage> {
+class FacturesPageState extends State<FacturesPage> {
   final TextEditingController _rechercheController =
       TextEditingController();
 
@@ -31,6 +31,9 @@ class _FacturesPageState extends State<FacturesPage> {
 
   bool _chargement = true;
   bool _synchronisationEnCours = false;
+
+  Future<void>? _synchronisationFacturesFuture;
+
   String? _erreur;
 
   @override
@@ -48,7 +51,10 @@ class _FacturesPageState extends State<FacturesPage> {
   // CHARGEMENT DES FACTURES
   // ============================================================
 
-  Future<void> _chargerFactures() async {
+  
+  Future<void> _chargerFactures({
+    bool lancerSynchronisation = true,
+  }) async {
     if (!mounted) {
       return;
     }
@@ -71,14 +77,10 @@ class _FacturesPageState extends State<FacturesPage> {
         _chargement = false;
       });
 
-      /*
-       * Les données locales sont affichées immédiatement.
-       *
-       * La synchronisation distante se fait ensuite en arrière-plan.
-       * Ainsi, une absence d'Internet ne bloque pas l'utilisation
-       * de la page.
-       */
-      _synchroniserFactures();
+      // Synchronisation distante en arrière-plan.
+      if (lancerSynchronisation) {
+        _synchroniserFactures();
+      }
     } catch (e) {
       if (!mounted) {
         return;
@@ -92,17 +94,52 @@ class _FacturesPageState extends State<FacturesPage> {
     }
   }
 
+
+  /// Actualise les factures depuis SQLite et le serveur.
+  /// Cette méthode peut être appelée depuis ApplicationPage.
+  Future<void> actualiser() async {
+    if (!mounted) {
+      return;
+    }
+
+    await _chargerFactures(
+      lancerSynchronisation: false,
+    );
+
+    if (mounted) {
+      await _synchroniserFactures();
+    }
+  }
+
+
   // ============================================================
   // SYNCHRONISATION
   // ============================================================
 
+  
   Future<void> _synchroniserFactures() async {
-    if (_synchronisationEnCours) {
+    // Si une synchronisation est déjà en cours,
+    // attendre sa fin au lieu de l'ignorer.
+    if (_synchronisationFacturesFuture != null) {
+      await _synchronisationFacturesFuture;
       return;
     }
 
     _synchronisationEnCours = true;
 
+    final synchronisation = _executerSynchronisationFactures();
+
+    _synchronisationFacturesFuture = synchronisation;
+
+    try {
+      await synchronisation;
+    } finally {
+      _synchronisationFacturesFuture = null;
+      _synchronisationEnCours = false;
+    }
+  }
+
+  Future<void> _executerSynchronisationFactures() async {
     try {
       await _factureSyncService.synchroniser();
 
@@ -117,14 +154,10 @@ class _FacturesPageState extends State<FacturesPage> {
         _factures = factures;
       });
     } catch (_) {
-      /*
-       * Une erreur de synchronisation ne doit pas effacer
-       * les données locales déjà disponibles.
-       */
-    } finally {
-      _synchronisationEnCours = false;
+      // On conserve les données locales en cas d'erreur.
     }
   }
+
 
   // ============================================================
   // RECHERCHE
