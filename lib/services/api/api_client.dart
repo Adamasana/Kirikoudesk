@@ -26,7 +26,7 @@ class ApiClient {
 
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://127.0.0.1:8000/api/desktop',
+    defaultValue: 'https://test.kirikoubf.fondationaic.org/api/desktop',
   );
 
   final http.Client _client;
@@ -101,6 +101,67 @@ class ApiClient {
     );
 
     return _traiterReponse(reponse);
+  }
+
+  // ============================================================
+  // NOUVEAUX PRODUITS
+  // ============================================================
+
+  /// Récupère les produits dont l'ID est supérieur
+  /// au dernier ID déjà synchronisé localement.
+  ///
+  /// API :
+  /// GET /produits/nouveaux/?dernier_id=ID
+  ///
+  /// Retour attendu :
+  /// {
+  ///   "success": true,
+  ///   "produits": [...],
+  ///   "dernier_id": 25,
+  ///   "nombre": 3
+  /// }
+
+  Future<Map<String, dynamic>> obtenirNouveauxProduits({
+    required int dernierId,
+    String? token,
+  }) async {
+    return get(
+      '/produits/nouveaux/?dernier_id=$dernierId',
+      token: token,
+    );
+  }
+
+  // ============================================================
+  // NOUVEAUX SOUS-PRODUITS ET STOCKS
+  // ============================================================
+
+  /// Récupère les sous-produits dont l'ID est supérieur
+  /// au dernier ID déjà synchronisé localement.
+  ///
+  /// Récupère également les stocks associés à ces
+  /// nouveaux sous-produits.
+  ///
+  /// API :
+  /// GET /sous-produits/nouveaux/?dernier_id=ID
+  ///
+  /// Retour attendu :
+  /// {
+  ///   "success": true,
+  ///   "sous_produits": [...],
+  ///   "stocks": [...],
+  ///   "dernier_id": 50,
+  ///   "nombre_sous_produits": 5,
+  ///   "nombre_stocks": 8
+  /// }
+
+  Future<Map<String, dynamic>> obtenirNouveauxSousProduits({
+    required int dernierId,
+    String? token,
+  }) async {
+    return get(
+      '/sous-produits/nouveaux/?dernier_id=$dernierId',
+      token: token,
+    );
   }
 
   // ============================================================

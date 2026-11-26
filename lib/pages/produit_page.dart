@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 
 import '../models/produit.dart';
@@ -5,7 +6,13 @@ import '../repositories/produit_repository.dart';
 import 'detail_produit_page.dart';
 
 class ProduitPage extends StatefulWidget {
-  const ProduitPage({super.key});
+  final Future<Map<String, int>?> Function()?
+      onSynchronisationIncrementale;
+
+  const ProduitPage({
+    super.key,
+    this.onSynchronisationIncrementale,
+  });
 
   @override
   State<ProduitPage> createState() => _ProduitPageState();
@@ -20,12 +27,17 @@ class _ProduitPageState extends State<ProduitPage> {
   static const Color fond = Color(0xFFF7F8FA);
   static const Color blanc = Colors.white;
 
-  final ProduitRepository _produitRepository = ProduitRepository();
+  final ProduitRepository _produitRepository =
+      ProduitRepository();
+
   final TextEditingController _rechercheController =
       TextEditingController();
 
   List<Produit> _produits = [];
+
   bool _chargement = true;
+  bool _synchronisationEnCours = false;
+
   String? _erreur;
 
   @override
@@ -35,7 +47,9 @@ class _ProduitPageState extends State<ProduitPage> {
     _chargerProduits();
 
     _rechercheController.addListener(() {
-      setState(() {});
+      if (mounted) {
+        setState(() {});
+      }
     });
   }
 
@@ -45,14 +59,21 @@ class _ProduitPageState extends State<ProduitPage> {
     super.dispose();
   }
 
+  // ============================================================
+  // CHARGER LES PRODUITS LOCAUX
+  // ============================================================
+
   Future<void> _chargerProduits() async {
     try {
-      setState(() {
-        _chargement = true;
-        _erreur = null;
-      });
+      if (mounted) {
+        setState(() {
+          _chargement = true;
+          _erreur = null;
+        });
+      }
 
-      final produits = await _produitRepository.obtenirTous();
+      final produits =
+          await _produitRepository.obtenirTous();
 
       if (!mounted) return;
 
@@ -70,8 +91,82 @@ class _ProduitPageState extends State<ProduitPage> {
     }
   }
 
+  // ============================================================
+  // SYNCHRONISATION INCREMENTALE
+  // ============================================================
+
+  Future<void> _synchroniser() async {
+    final synchroniser =
+        widget.onSynchronisationIncrementale;
+
+    if (synchroniser == null || _synchronisationEnCours) {
+      return;
+    }
+
+    setState(() {
+      _synchronisationEnCours = true;
+    });
+
+    try {
+      final resultat = await synchroniser();
+
+      if (!mounted) return;
+
+      if (resultat == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Une synchronisation est déjà en cours.',
+            ),
+          ),
+        );
+
+        return;
+      }
+
+      // Actualiser les données locales après synchronisation.
+      await _chargerProduits();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Synchronisation terminée : '
+            '${resultat['produits'] ?? 0} produits, '
+            '${resultat['sous_produits'] ?? 0} sous-produits et '
+            '${resultat['stocks'] ?? 0} stocks.',
+          ),
+          backgroundColor: Colors.green.shade700,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Échec de la synchronisation : $e',
+          ),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _synchronisationEnCours = false;
+        });
+      }
+    }
+  }
+
+  // ============================================================
+  // RECHERCHE
+  // ============================================================
+
   List<Produit> get _produitsFiltres {
-    final recherche = _rechercheController.text.trim().toLowerCase();
+    final recherche =
+        _rechercheController.text.trim().toLowerCase();
 
     if (recherche.isEmpty) {
       return _produits;
@@ -88,6 +183,10 @@ class _ProduitPageState extends State<ProduitPage> {
     }).toList();
   }
 
+  // ============================================================
+  // OUVRIR LE DETAIL
+  // ============================================================
+
   void _ouvrirDetail(Produit produit) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -97,6 +196,10 @@ class _ProduitPageState extends State<ProduitPage> {
       ),
     );
   }
+
+  // ============================================================
+  // FORMATER LE PRIX
+  // ============================================================
 
   String _formaterPrix(int prix) {
     final textePrix = prix.toString();
@@ -112,6 +215,10 @@ class _ProduitPageState extends State<ProduitPage> {
 
     return buffer.toString();
   }
+
+  // ============================================================
+  // CONSTRUCTION PRINCIPALE
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -132,6 +239,10 @@ class _ProduitPageState extends State<ProduitPage> {
       ),
     );
   }
+
+  // ============================================================
+  // ENTETE
+  // ============================================================
 
   Widget _construireEntete() {
     return Row(
@@ -165,7 +276,10 @@ class _ProduitPageState extends State<ProduitPage> {
             ],
           ),
         ),
+
         const SizedBox(width: 20),
+
+        // RECHERCHE
         SizedBox(
           width: 340,
           height: 48,
@@ -186,18 +300,19 @@ class _ProduitPageState extends State<ProduitPage> {
                 size: 21,
                 color: muet,
               ),
-              suffixIcon: _rechercheController.text.isNotEmpty
-                  ? IconButton(
-                      onPressed: () {
-                        _rechercheController.clear();
-                      },
-                      icon: const Icon(
-                        Icons.close_rounded,
-                        size: 19,
-                        color: muet,
-                      ),
-                    )
-                  : null,
+              suffixIcon:
+                  _rechercheController.text.isNotEmpty
+                      ? IconButton(
+                          onPressed: () {
+                            _rechercheController.clear();
+                          },
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            size: 19,
+                            color: muet,
+                          ),
+                        )
+                      : null,
               filled: true,
               fillColor: blanc,
               contentPadding: const EdgeInsets.symmetric(
@@ -225,18 +340,35 @@ class _ProduitPageState extends State<ProduitPage> {
             ),
           ),
         ),
+
         const SizedBox(width: 14),
+
+        // SYNCHRONISATION
         SizedBox(
           height: 48,
           child: ElevatedButton.icon(
-            onPressed: _afficherAjoutProduit,
-            icon: const Icon(
-              Icons.add_rounded,
-              size: 20,
-            ),
-            label: const Text(
-              'Ajouter un produit',
-              style: TextStyle(
+            onPressed: _synchronisationEnCours ||
+                    widget.onSynchronisationIncrementale == null
+                ? null
+                : _synchroniser,
+            icon: _synchronisationEnCours
+                ? const SizedBox(
+                    width: 17,
+                    height: 17,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: blanc,
+                    ),
+                  )
+                : const Icon(
+                    Icons.sync_rounded,
+                    size: 19,
+                  ),
+            label: Text(
+              _synchronisationEnCours
+                  ? 'Synchronisation...'
+                  : 'Synchroniser',
+              style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
               ),
@@ -244,6 +376,9 @@ class _ProduitPageState extends State<ProduitPage> {
             style: ElevatedButton.styleFrom(
               backgroundColor: primaire,
               foregroundColor: blanc,
+              disabledBackgroundColor:
+                  primaire.withValues(alpha: 0.6),
+              disabledForegroundColor: blanc,
               elevation: 0,
               padding: const EdgeInsets.symmetric(
                 horizontal: 18,
@@ -257,6 +392,10 @@ class _ProduitPageState extends State<ProduitPage> {
       ],
     );
   }
+
+  // ============================================================
+  // CONTENU
+  // ============================================================
 
   Widget _construireContenu() {
     if (_chargement) {
@@ -298,7 +437,9 @@ class _ProduitPageState extends State<ProduitPage> {
             const SizedBox(height: 16),
             OutlinedButton.icon(
               onPressed: _chargerProduits,
-              icon: const Icon(Icons.refresh_rounded),
+              icon: const Icon(
+                Icons.refresh_rounded,
+              ),
               label: const Text('Réessayer'),
             ),
           ],
@@ -349,6 +490,10 @@ class _ProduitPageState extends State<ProduitPage> {
       ),
     );
   }
+
+  // ============================================================
+  // TABLEAU DES PRODUITS
+  // ============================================================
 
   Widget _construireTableau(
     List<Produit> produits,
@@ -409,6 +554,10 @@ class _ProduitPageState extends State<ProduitPage> {
     );
   }
 
+  // ============================================================
+  // CELLULE ENTETE
+  // ============================================================
+
   Widget _celluleEntete(String valeur) {
     return SizedBox(
       height: 50,
@@ -430,6 +579,10 @@ class _ProduitPageState extends State<ProduitPage> {
       ),
     );
   }
+
+  // ============================================================
+  // CELLULE PRODUIT
+  // ============================================================
 
   Widget _celluleProduit(
     String valeur, {
@@ -458,6 +611,10 @@ class _ProduitPageState extends State<ProduitPage> {
       ),
     );
   }
+
+  // ============================================================
+  // ETAT VIDE
+  // ============================================================
 
   Widget _construireEtatVide() {
     final rechercheActive =
@@ -508,26 +665,6 @@ class _ProduitPageState extends State<ProduitPage> {
           ],
         ),
       ),
-    );
-  }
-
-  void _afficherAjoutProduit() {
-    showDialog<void>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Ajouter un produit'),
-          content: const Text(
-            'La création des produits sera connectée au backend prochainement.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Fermer'),
-            ),
-          ],
-        );
-      },
     );
   }
 }

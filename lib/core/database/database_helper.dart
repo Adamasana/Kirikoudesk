@@ -73,6 +73,22 @@ class DatabaseHelper {
       },
     );
 
+    // ========================================================
+    // VERIFICATION DE LA TABLE DE SYNCHRONISATION
+    // ========================================================
+
+    // Cette méthode est exécutée à chaque ouverture.
+    // CREATE TABLE IF NOT EXISTS évite de recréer une table
+    // qui existe déjà et préserve ses curseurs.
+
+    await DatabaseMigrations.creerTableSynchronisationIncrementale(
+      _base!,
+    );
+
+    debugPrint(
+      'Table synchronisation_incrementale vérifiée.',
+    );
+
     return _base!;
   }
 

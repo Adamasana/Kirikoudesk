@@ -12,6 +12,7 @@ class DatabaseTables {
   static const String inventaire = 'inventaire';
   static const String ligneInventaire = 'ligne_inventaire';
   static const String scanInventaire = 'scan_inventaire';
+  static const String synchronisationIncrementale = 'synchronisation_incrementale';
 
   const DatabaseTables._();
 }

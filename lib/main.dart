@@ -1,6 +1,10 @@
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'services/synchronisation/synchronisation_incrementale_service.dart';
 
 import 'core/database/database_helper.dart';
 import 'pages/connexion_page.dart';
@@ -46,6 +50,10 @@ class KirikouBF extends StatelessWidget {
     );
   }
 }
+
+// ============================================================
+// PAGE DE DEMARRAGE
+// ============================================================
 
 class DemarragePage extends StatefulWidget {
   const DemarragePage({super.key});
@@ -119,6 +127,10 @@ class _DemarragePageState extends State<DemarragePage> {
   }
 }
 
+// ============================================================
+// APPLICATION PRINCIPALE
+// ============================================================
+
 class ApplicationPage extends StatefulWidget {
   const ApplicationPage({super.key});
 
@@ -129,6 +141,15 @@ class ApplicationPage extends StatefulWidget {
 class _ApplicationPageState extends State<ApplicationPage> {
   int _indexActif = 0;
   bool _menuOuvert = true;
+
+  // ============================================================
+  // SYNCHRONISATION INCREMENTALE
+  // ============================================================
+
+  late final SynchronisationIncrementaleService
+      _synchronisationIncrementaleService;
+
+  Timer? _timerSynchronisationIncrementale;
 
   // ============================================================
   // CLÉ DE LA PAGE CAISSE
@@ -144,9 +165,12 @@ class _ApplicationPageState extends State<ApplicationPage> {
   final GlobalKey<FacturesPageState> _facturesPageKey =
       GlobalKey<FacturesPageState>();
 
-  
+  // ============================================================
+  // CLÉ DE LA PAGE DASHBOARD
+  // ============================================================
+
   final GlobalKey<DashboardPageState> _dashboardPageKey =
-    GlobalKey<DashboardPageState>();
+      GlobalKey<DashboardPageState>();
 
   // ============================================================
   // CONSERVATION DES PAGES
@@ -187,6 +211,37 @@ class _ApplicationPageState extends State<ApplicationPage> {
 
     // La première page est créée au démarrage.
     _pages[0] = _creerPage(0);
+
+    // Initialisation du service de synchronisation incrémentale.
+    _synchronisationIncrementaleService =
+        SynchronisationIncrementaleService();
+
+    // Première synchronisation après l'ouverture de l'application.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      _synchroniserIncrementalement().catchError((e) {
+        debugPrint(
+          'Erreur synchronisation incrémentale initiale : $e',
+        );
+
+        return null;
+      });
+    });
+
+    // Synchronisation automatique toutes les 5 minutes.
+    _timerSynchronisationIncrementale =
+        Timer.periodic(const Duration(minutes: 5), (_) {
+      if (!mounted) return;
+
+      _synchroniserIncrementalement().catchError((e) {
+        debugPrint(
+          'Erreur synchronisation incrémentale automatique : $e',
+        );
+
+        return null;
+      });
+    });
   }
 
   // ============================================================
@@ -215,7 +270,10 @@ class _ApplicationPageState extends State<ApplicationPage> {
         );
 
       case 3:
-        return const ProduitPage();
+        return ProduitPage(
+          onSynchronisationIncrementale:
+              _synchroniserIncrementalement,
+        );
 
       case 4:
         return InventairePage(
@@ -244,6 +302,39 @@ class _ApplicationPageState extends State<ApplicationPage> {
         },
       ),
     );
+  }
+
+  // ============================================================
+  // SYNCHRONISATION INCREMENTALE
+  // ============================================================
+
+  Future<Map<String, int>?> _synchroniserIncrementalement() async {
+    final resultat =
+        await _synchronisationIncrementaleService.synchroniser();
+
+    if (resultat == null) {
+      debugPrint(
+        'Une synchronisation incrémentale est déjà en cours.',
+      );
+
+      return null;
+    }
+
+    debugPrint('Synchronisation incrémentale terminée.');
+
+    debugPrint(
+      'Produits : ${resultat['produits']}',
+    );
+
+    debugPrint(
+      'Sous-produits : ${resultat['sous_produits']}',
+    );
+
+    debugPrint(
+      'Stocks : ${resultat['stocks']}',
+    );
+
+    return resultat;
   }
 
   @override
@@ -512,106 +603,104 @@ class _ApplicationPageState extends State<ApplicationPage> {
   // SYNCHRONISATION GLOBALE
   // ============================================================
 
-  
-Future<void> _synchroniserGlobalement() async {
-  final service = SynchronisationGlobaleService();
+  Future<void> _synchroniserGlobalement() async {
+    final service = SynchronisationGlobaleService();
 
-  try {
-    final resultat = await service.synchroniser();
+    try {
+      final resultat = await service.synchroniser();
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    final total = resultat.totalCommandes;
+      final total = resultat.totalCommandes;
 
-    final synchronisees =
-        resultat.commandesSynchronisees;
+      final synchronisees =
+          resultat.commandesSynchronisees;
 
-    final dejaSynchronisees =
-        resultat.commandesDejaSynchronisees;
+      final dejaSynchronisees =
+          resultat.commandesDejaSynchronisees;
 
-    final erreurs =
-        resultat.nombreErreurs;
+      final erreurs =
+          resultat.nombreErreurs;
 
-    String message;
+      String message;
 
-    if (total == 0) {
-      message =
-          'Synchronisation terminée. '
-          'Aucune commande en attente.';
-    } else if (erreurs > 0) {
-      message =
-          'Synchronisation terminée : '
-          '$synchronisees synchronisée(s), '
-          '$dejaSynchronisees déjà synchronisée(s), '
-          '$erreurs erreur(s).';
-    } else {
-      message =
-          'Synchronisation terminée : '
-          '$synchronisees commande(s) synchronisée(s).';
+      if (total == 0) {
+        message =
+            'Synchronisation terminée. '
+            'Aucune commande en attente.';
+      } else if (erreurs > 0) {
+        message =
+            'Synchronisation terminée : '
+            '$synchronisees synchronisée(s), '
+            '$dejaSynchronisees déjà synchronisée(s), '
+            '$erreurs erreur(s).';
+      } else {
+        message =
+            'Synchronisation terminée : '
+            '$synchronisees commande(s) synchronisée(s).';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+            style: const TextStyle(
+              fontFamily: 'Inter',
+            ),
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      // ========================================================
+      // ACTUALISATION DES PAGES APRÈS SYNCHRONISATION
+      // ========================================================
+
+      // Actualiser la caisse si elle est affichée.
+      if (_indexActif == 1) {
+        await _caissePageKey.currentState?.actualiser();
+      }
+
+      // Actualiser les factures si la page existe.
+      await _facturesPageKey.currentState?.actualiser();
+
+      // Actualiser les statistiques du Dashboard.
+      await _dashboardPageKey.currentState?.actualiser();
+
+    } on SynchronisationGlobaleException catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.message,
+            style: const TextStyle(
+              fontFamily: 'Inter',
+            ),
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Erreur pendant la synchronisation : $e',
+            style: const TextStyle(
+              fontFamily: 'Inter',
+            ),
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+    } finally {
+      service.fermer();
     }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: const TextStyle(
-            fontFamily: 'Inter',
-          ),
-        ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-
-    // ============================================================
-    // ACTUALISATION DES PAGES APRÈS SYNCHRONISATION
-    // ============================================================
-
-    // Actualiser la caisse si elle est affichée.
-    if (_indexActif == 1) {
-      await _caissePageKey.currentState?.actualiser();
-    }
-
-    // Actualiser les factures si la page existe.
-    await _facturesPageKey.currentState?.actualiser();
-
-    // Actualiser les statistiques du Dashboard.
-    await _dashboardPageKey.currentState?.actualiser();
-
-  } on SynchronisationGlobaleException catch (e) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          e.message,
-          style: const TextStyle(
-            fontFamily: 'Inter',
-          ),
-        ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-
-  } catch (e) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Erreur pendant la synchronisation : $e',
-          style: const TextStyle(
-            fontFamily: 'Inter',
-          ),
-        ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-
-  } finally {
-    service.fermer();
   }
-}
-
 
   // ============================================================
   // DÉCONNEXION
@@ -633,5 +722,20 @@ Future<void> _synchroniserGlobalement() async {
       ),
       (route) => false,
     );
+  }
+
+  // ============================================================
+  // LIBÉRATION DES RESSOURCES
+  // ============================================================
+
+  @override
+  void dispose() {
+    // Arrêter le timer automatique.
+    _timerSynchronisationIncrementale?.cancel();
+
+    // Fermer le client API de synchronisation incrémentale.
+    _synchronisationIncrementaleService.fermer();
+
+    super.dispose();
   }
 }

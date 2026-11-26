@@ -1,3 +1,4 @@
+
 import 'package:sqflite/sqflite.dart';
 
 import 'database_tables.dart';
@@ -309,8 +310,22 @@ class DatabaseMigrations {
       ON ${DatabaseTables.commande}(encaisse_par)
     ''');
 
+    // ============================================================
+    // INVENTAIRE
+    // ============================================================
+
     await creerTablesInventaire(db);
+
+    // ============================================================
+    // SYNCHRONISATION INCREMENTALE
+    // ============================================================
+
+    await creerTableSynchronisationIncrementale(db);
   }
+
+  // ============================================================
+  // TABLES INVENTAIRE
+  // ============================================================
 
   static Future<void> creerTablesInventaire(
     DatabaseExecutor db,
@@ -370,6 +385,37 @@ class DatabaseMigrations {
   }
 
   // ============================================================
+  // TABLE SYNCHRONISATION INCREMENTALE
+  // ============================================================
+
+  static Future<void> creerTableSynchronisationIncrementale(
+    DatabaseExecutor db,
+  ) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS
+      ${DatabaseTables.synchronisationIncrementale} (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+
+        dernier_produit_id INTEGER NOT NULL DEFAULT 0,
+
+        dernier_sous_produit_id INTEGER NOT NULL DEFAULT 0,
+
+        date_derniere_synchronisation TEXT
+      )
+    ''');
+
+    await db.insert(
+      DatabaseTables.synchronisationIncrementale,
+      {
+        'id': 1,
+        'dernier_produit_id': 0,
+        'dernier_sous_produit_id': 0,
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+
+  // ============================================================
   // MIGRATIONS
   // ============================================================
 
@@ -423,7 +469,7 @@ class DatabaseMigrations {
       }
     }
 
-     // ============================================================
+    // ============================================================
     // VERSION 4
     // Création des tables d'inventaire
     // ============================================================
@@ -431,6 +477,5 @@ class DatabaseMigrations {
     if (oldVersion < 4) {
       await creerTablesInventaire(db);
     }
-    
   }
 }
